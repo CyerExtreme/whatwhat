@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App de Conversación por Temas</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            color: #333;
+        }
+        .section-list, .chat-section {
+            width: 80%;
+            max-width: 600px;
+            margin-top: 20px;
+        }
+        .section-list button, .chat-section button {
+            padding: 10px;
+            margin: 5px;
+            width: 100%;
+            font-size: 16px;
+        }
+        .audio-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        .audio-list li {
+            margin: 10px 0;
+        }
+        .recording {
+            background-color: red;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>App de Conversación por Temas</h1>
+
+    <div class="section-list">
+        <h2>Selecciona un Tema</h2>
+        <button onclick="openChat('politica')">Política</button>
+        <button onclick="openChat('actualidad')">Actualidad</button>
+        <button onclick="openChat('gamers')">Gamers</button>
+    </div>
+
+    <div class="chat-section" id="chatSection" style="display:none;">
+        <h2 id="chatTitle">Tema: </h2>
+        <button onclick="goBack()">Volver a Temas</button>
+        <ul class="audio-list" id="audioList">
+            <!-- Aquí se cargarán los audios -->
+        </ul>
+        <button id="recordButton" onclick="toggleRecording()">Grabar Audio</button>
+    </div>
+
+    <script>
+        let currentSection = '';
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+
+        function openChat(section) {
+            currentSection = section;
+            document.getElementById('chatTitle').textContent = "Tema: " + section;
+            document.querySelector('.section-list').style.display = 'none';
+            document.getElementById('chatSection').style.display = 'block';
+            loadAudioMessages(section);
+        }
+
+        function goBack() {
+            document.querySelector('.section-list').style.display = 'block';
+            document.getElementById('chatSection').style.display = 'none';
+        }
+
+        function loadAudioMessages(section) {
+            const audioList = document.getElementById('audioList');
+            audioList.innerHTML = ''; // Limpiar la lista de audios
+
+            // Cargar los audios guardados en localStorage
+            const savedRecordings = JSON.parse(localStorage.getItem(section)) || [];
+            savedRecordings.forEach(audioBase64 => {
+                const audioUrl = "data:audio/mp3;base64," + audioBase64;
+                const li = document.createElement('li');
+                const audio = document.createElement('audio');
+                audio.controls = true;
+                audio.src = audioUrl;
+                li.appendChild(audio);
+                audioList.appendChild(li);
+            });
+        }
+
+        async function toggleRecording() {
+            const recordButton = document.getElementById('recordButton');
+
+            if (!isRecording) {
+                try {
+                    // Iniciar grabación
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = []; // Limpiar el arreglo de fragmentos
+
+                    mediaRecorder.ondataavailable = (event) => {
+                        audioChunks.push(event.data);
+                    };
+
+                    mediaRecorder.start();
+                    isRecording = true;
+                    recordButton.textContent = "Grabando...";
+                    recordButton.classList.add("recording");
+                    console.log('Grabación iniciada');
+                } catch (error) {
+                    console.error('Error al acceder al micrófono:', error);
+                }
+            } else {
+                // Detener grabación
+                mediaRecorder.stop();
+                isRecording = false;
+                recordButton.textContent = "Grabar Audio";
+                recordButton.classList.remove("recording");
+
+                mediaRecorder.onstop = async () => {
+                    // Crear un archivo Blob del audio grabado
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
+                    const audioBase64 = await blobToBase64(audioBlob);
+
+                    // Guardar el audio en localStorage bajo el tema actual
+                    let savedRecordings = JSON.parse(localStorage.getItem(currentSection)) || [];
+                    savedRecordings.push(audioBase64);
+                    localStorage.setItem(currentSection, JSON.stringify(savedRecordings));
+
+                    // Mostrar el audio en la lista del tema actual
+                    const audioList = document.getElementById('audioList');
+                    const li = document.createElement('li');
+                    const audio = document.createElement('audio');
+                    audio.controls = true;
+                    audio.src = "data:audio/mp3;base64," + audioBase64;
+                    li.appendChild(audio);
+                    audioList.appendChild(li);
+
+                    console.log('Grabación detenida y audio añadido a la lista');
+                };
+            }
+        }
+
+        // Función para convertir Blob a Base64
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+    </script>
+
+</body>
+</html>
