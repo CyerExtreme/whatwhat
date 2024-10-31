@@ -71,7 +71,9 @@
         let audioChunks = [];
         let isRecording = false;
 
+        // Función para abrir el chat de la sección seleccionada
         function openChat(section) {
+            console.log(`Abriendo chat para la sección: ${section}`); // Verifica que el evento se active
             currentSection = section;
             document.getElementById('chatTitle').textContent = "Tema: " + section;
             document.querySelector('.section-list').style.display = 'none';
@@ -79,42 +81,53 @@
             loadAudioMessages(section);
         }
 
+        // Función para regresar a la lista de temas
         function goBack() {
+            console.log('Volviendo a la lista de temas');
             document.querySelector('.section-list').style.display = 'block';
             document.getElementById('chatSection').style.display = 'none';
         }
 
+        // Función para cargar los mensajes de audio de la base de datos
         async function loadAudioMessages(section) {
             const audioList = document.getElementById('audioList');
             audioList.innerHTML = ''; // Limpiar la lista de audios
 
-            // Consultar los audios guardados en Supabase
-            const { data, error } = await supabase
-                .from('audios')
-                .select('*')
-                .eq('section', section);
+            console.log(`Cargando audios para la sección: ${section}`);
+            
+            try {
+                const { data, error } = await supabase
+                    .from('audios')
+                    .select('*')
+                    .eq('section', section);
 
-            if (error) {
-                console.error("Error al cargar los audios:", error);
-                return;
+                if (error) {
+                    console.error("Error al cargar los audios:", error);
+                    alert("Error al cargar los audios. Revisa la consola para más detalles.");
+                    return;
+                }
+
+                data.forEach(audioData => {
+                    const li = document.createElement('li');
+                    const audio = document.createElement('audio');
+                    audio.controls = true;
+                    audio.src = audioData.url;
+                    li.appendChild(audio);
+                    audioList.appendChild(li);
+                });
+            } catch (error) {
+                console.error("Error inesperado:", error);
+                alert("Ha ocurrido un error inesperado.");
             }
-
-            data.forEach(audioData => {
-                const li = document.createElement('li');
-                const audio = document.createElement('audio');
-                audio.controls = true;
-                audio.src = audioData.url;
-                li.appendChild(audio);
-                audioList.appendChild(li);
-            });
         }
 
+        // Función para grabar y almacenar audio
         async function toggleRecording() {
             const recordButton = document.getElementById('recordButton');
 
             if (!isRecording) {
                 try {
-                    // Iniciar grabación
+                    console.log("Iniciando grabación...");
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     mediaRecorder = new MediaRecorder(stream);
                     audioChunks = []; // Limpiar el arreglo de fragmentos
@@ -127,12 +140,12 @@
                     isRecording = true;
                     recordButton.textContent = "Grabando...";
                     recordButton.classList.add("recording");
-                    console.log('Grabación iniciada');
                 } catch (error) {
                     console.error('Error al acceder al micrófono:', error);
+                    alert("Error al acceder al micrófono. Revisa la consola para más detalles.");
                 }
             } else {
-                // Detener grabación
+                console.log("Deteniendo grabación...");
                 mediaRecorder.stop();
                 isRecording = false;
                 recordButton.textContent = "Grabar Audio";
@@ -152,6 +165,7 @@
 
                     if (error) {
                         console.error("Error al subir el audio:", error);
+                        alert("Error al subir el audio. Revisa la consola para más detalles.");
                         return;
                     }
 
@@ -168,6 +182,7 @@
 
                     if (dbError) {
                         console.error("Error al guardar en la base de datos:", dbError);
+                        alert("Error al guardar en la base de datos. Revisa la consola para más detalles.");
                         return;
                     }
 
