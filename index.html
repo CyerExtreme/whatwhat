@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <script src="https://unpkg.com/@supabase/supabase-js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>App de Conversación por Temas</title>
@@ -60,6 +61,11 @@
     </div>
 
     <script>
+        // Configuración de Supabase
+        const supabaseUrl = "https://tijqaxtgrsmrbnlhxsip.supabase.co"; 
+        const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpanFheHRncnNtcmJubGh4c2lwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzAzNTAyNzgsImV4cCI6MjA0NTkyNjI3OH0.gud9mWGg9FJ9tViU31F90sWr2LxI-idVVa9QMdGXPZA"; 
+        const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
         let currentSection = '';
         let mediaRecorder;
         let audioChunks = [];
@@ -78,18 +84,26 @@
             document.getElementById('chatSection').style.display = 'none';
         }
 
-        function loadAudioMessages(section) {
+        async function loadAudioMessages(section) {
             const audioList = document.getElementById('audioList');
             audioList.innerHTML = ''; // Limpiar la lista de audios
 
-            // Cargar los audios guardados en localStorage
-            const savedRecordings = JSON.parse(localStorage.getItem(section)) || [];
-            savedRecordings.forEach(audioBase64 => {
-                const audioUrl = "data:audio/mp3;base64," + audioBase64;
+            // Consultar los audios guardados en Supabase
+            const { data, error } = await supabase
+                .from('audios')
+                .select('*')
+                .eq('section', section);
+
+            if (error) {
+                console.error("Error al cargar los audios:", error);
+                return;
+            }
+
+            data.forEach(audioData => {
                 const li = document.createElement('li');
                 const audio = document.createElement('audio');
                 audio.controls = true;
-                audio.src = audioUrl;
+                audio.src = audioData.url;
                 li.appendChild(audio);
                 audioList.appendChild(li);
             });
@@ -125,37 +139,50 @@
                 recordButton.classList.remove("recording");
 
                 mediaRecorder.onstop = async () => {
-                    // Crear un archivo Blob del audio grabado
                     const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
-                    const audioBase64 = await blobToBase64(audioBlob);
+                    const audioFileName = `${Date.now()}.mp3`;
 
-                    // Guardar el audio en localStorage bajo el tema actual
-                    let savedRecordings = JSON.parse(localStorage.getItem(currentSection)) || [];
-                    savedRecordings.push(audioBase64);
-                    localStorage.setItem(currentSection, JSON.stringify(savedRecordings));
+                    // Subir el archivo de audio a Supabase Storage
+                    const { data, error } = await supabase.storage
+                        .from('audios')
+                        .upload(`${currentSection}/${audioFileName}`, audioBlob, {
+                            cacheControl: '3600',
+                            upsert: false
+                        });
 
-                    // Mostrar el audio en la lista del tema actual
+                    if (error) {
+                        console.error("Error al subir el audio:", error);
+                        return;
+                    }
+
+                    const { publicURL } = supabase.storage
+                        .from('audios')
+                        .getPublicUrl(`${currentSection}/${audioFileName}`);
+
+                    // Guardar la URL y el tema en la base de datos
+                    const { data: dbData, error: dbError } = await supabase
+                        .from('audios')
+                        .insert([
+                            { section: currentSection, url: publicURL }
+                        ]);
+
+                    if (dbError) {
+                        console.error("Error al guardar en la base de datos:", dbError);
+                        return;
+                    }
+
+                    // Mostrar el nuevo audio en la lista sin recargar la página
                     const audioList = document.getElementById('audioList');
                     const li = document.createElement('li');
                     const audio = document.createElement('audio');
                     audio.controls = true;
-                    audio.src = "data:audio/mp3;base64," + audioBase64;
+                    audio.src = publicURL;
                     li.appendChild(audio);
                     audioList.appendChild(li);
 
                     console.log('Grabación detenida y audio añadido a la lista');
                 };
             }
-        }
-
-        // Función para convertir Blob a Base64
-        function blobToBase64(blob) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result.split(',')[1]);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
         }
     </script>
 
